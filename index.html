@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ka">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NMT Shop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <a href="index.html" class="brand">NMT <span>Shop</span></a>
+  <nav class="header-nav">
+    <a href="#catalog">კატალოგი</a>
+    <a href="admin.html">ადმინი</a>
+  </nav>
+</header>
+
+<section class="hero">
+  <h1>ხარისხიანი პროდუქცია, პირდაპირ ჩვენგან</h1>
+  <p>დაათვალიერეთ მთელი ასორტიმენტი — ფასები და ხელმისაწვდომობა ყოველთვის განახლებულია. კითხვების შემთხვევაში დაგვიკავშირდით სოციალურ ქსელებში.</p>
+</section>
+
+<section class="catalog" id="catalog">
+  <div id="catalog-grid" class="catalog-grid"></div>
+  <div id="empty-state" class="empty-state" style="display:none;">
+    <div class="big">ჯერ არცერთი პროდუქტი არ დამატებულა</div>
+    <div>მალე გამოჩნდება — დაბრუნდით მოგვიანებით.</div>
+  </div>
+</section>
+
+<footer class="site-footer">
+  <div class="copy">&copy; <span id="year"></span> NMT Shop</div>
+  <div class="social-links">
+    <!-- შეცვალეთ href მისამართები საკუთარი გვერდებით -->
+    <a href="https://instagram.com/nmtshop.ge" target="_blank" rel="noopener" aria-label="Instagram">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r="1"/></svg>
+    </a>
+    <a href="https://facebook.com/nmtshop.ge" target="_blank" rel="noopener" aria-label="Facebook">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 9h3V5h-3c-2.2 0-4 1.8-4 4v2H7v4h3v6h4v-6h3l1-4h-4V9c0-.6.4-1 1-1z"/></svg>
+    </a>
+    <a href="https://wa.me/995000000000" target="_blank" rel="noopener" aria-label="WhatsApp">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 12a8 8 0 1 1-14.6-4.6L4 20l4.8-1.3A8 8 0 0 1 20 12Z"/></svg>
+    </a>
+  </div>
+</footer>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="config.js"></script>
+<script>
+document.getElementById("year").textContent = new Date().getFullYear();
+
+const grid = document.getElementById("catalog-grid");
+const emptyState = document.getElementById("empty-state");
+
+function formatPrice(value) {
+  const num = Number(value);
+  if (isNaN(num)) return value;
+  return num.toLocaleString("ka-GE") + " ₾";
+}
+
+function renderProducts(products) {
+  grid.innerHTML = "";
+
+  if (products.length === 0) {
+    emptyState.style.display = "block";
+    return;
+  }
+  emptyState.style.display = "none";
+
+  products.forEach((p) => {
+    const card = document.createElement("div");
+    card.className = "product-card";
+
+    const thumb = document.createElement("div");
+    thumb.className = "thumb" + (p.imageUrl ? "" : " empty");
+    if (p.imageUrl) {
+      const img = document.createElement("img");
+      img.src = p.imageUrl;
+      img.alt = p.name || "";
+      thumb.appendChild(img);
+    } else {
+      thumb.textContent = "სურათი არ არის";
+    }
+
+    const body = document.createElement("div");
+    body.className = "body";
+    body.innerHTML = `
+      <div class="name">${escapeHtml(p.name || "")}</div>
+      <div class="desc">${escapeHtml(p.description || "")}</div>
+      <div class="price">${formatPrice(p.price)}</div>
+    `;
+
+    card.appendChild(thumb);
+    card.appendChild(body);
+    grid.appendChild(card);
+  });
+}
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// Live listener — ნებისმიერი ცვლილება ადმინ-პანელში მყისიერად აისახება აქ
+db.collection("products").orderBy("createdAt", "desc").onSnapshot(
+  (snapshot) => {
+    const products = snapshot.docs.map((doc) => doc.data());
+    renderProducts(products);
+  },
+  (error) => {
+    console.error("პროდუქტების ჩატვირთვის შეცდომა:", error);
+    grid.innerHTML = `<div class="empty-state"><div class="big">ჩატვირთვა ვერ მოხერხდა</div><div>შეამოწმეთ Firebase-ის კონფიგურაცია config.js ფაილში.</div></div>`;
+  }
+);
+</script>
+
+</body>
+</html>

@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ka">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NMT Shop — ადმინი</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ========== ლოგინის ფანჯარა ========== -->
+<div id="login-screen" class="login-wrap">
+  <div class="login-card">
+    <h1>ადმინის შესვლა</h1>
+    <p class="sub">შედით, რომ დაამატოთ ან შეცვალოთ პროდუქცია.</p>
+    <div id="login-error" class="error-msg">არასწორი მეილი ან პაროლი.</div>
+    <div class="field">
+      <label for="email">მეილი</label>
+      <input type="email" id="email" autocomplete="username" />
+    </div>
+    <div class="field">
+      <label for="password">პაროლი</label>
+      <input type="password" id="password" autocomplete="current-password" />
+    </div>
+    <button class="btn btn-primary" style="width:100%" id="login-btn">შესვლა</button>
+  </div>
+</div>
+
+<!-- ========== ადმინის პანელი (ჩანს შესვლის შემდეგ) ========== -->
+<div id="admin-screen" style="display:none;">
+  <header class="admin-header">
+    <a href="index.html" class="brand">NMT <span>Shop</span></a>
+    <div style="display:flex; align-items:center; gap:16px;">
+      <span id="user-email" style="font-size:14px; color:var(--ink-soft);"></span>
+      <button class="btn btn-ghost btn-small" id="logout-btn">გასვლა</button>
+    </div>
+  </header>
+
+  <main class="admin-main">
+    <h1>პროდუქციის მართვა</h1>
+
+    <div class="form-card">
+      <h2 id="form-title">ახალი პროდუქტის დამატება</h2>
+      <input type="hidden" id="product-id" />
+      <div class="form-row">
+        <div class="field">
+          <label for="p-name">დასახელება</label>
+          <input type="text" id="p-name" placeholder="მაგ. ტყავის ჩანთა" />
+        </div>
+        <div class="field">
+          <label for="p-price">ფასი (₾)</label>
+          <input type="number" id="p-price" placeholder="120" min="0" step="0.01" />
+        </div>
+      </div>
+      <div class="field">
+        <label for="p-desc">აღწერა</label>
+        <textarea id="p-desc" placeholder="მოკლე აღწერა პროდუქტზე"></textarea>
+      </div>
+      <div class="field">
+        <label for="p-image">სურათი</label>
+        <input type="file" id="p-image" accept="image/*" />
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" id="save-btn">შენახვა</button>
+        <button class="btn btn-ghost" id="cancel-edit-btn" style="display:none;">გაუქმება</button>
+      </div>
+      <div id="status-msg" class="status-msg"></div>
+    </div>
+
+    <table class="product-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>დასახელება</th>
+          <th>ფასი</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="product-rows"></tbody>
+    </table>
+  </main>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="config.js"></script>
+<script>
+const loginScreen = document.getElementById("login-screen");
+const adminScreen = document.getElementById("admin-screen");
+const loginError = document.getElementById("login-error");
+
+// ---------- Auth ----------
+
+document.getElementById("login-btn").addEventListener("click", () => {
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value;
+  loginError.classList.remove("show");
+  auth.signInWithEmailAndPassword(email, password).catch((err) => {
+    console.error(err);
+    loginError.classList.add("show");
+  });
+});
+
+document.getElementById("logout-btn").addEventListener("click", () => auth.signOut());
+
+auth.onAuthStateChanged((user) => {
+  if (user) {
+    loginScreen.style.display = "none";
+    adminScreen.style.display = "block";
+    document.getElementById("user-email").textContent = user.email;
+    listenToProducts();
+  } else {
+    loginScreen.style.display = "flex";
+    adminScreen.style.display = "none";
+  }
+});
+
+// ---------- Product form ----------
+
+const idField = document.getElementById("product-id");
+const nameField = document.getElementById("p-name");
+const priceField = document.getElementById("p-price");
+const descField = document.getElementById("p-desc");
+const imageField = document.getElementById("p-image");
+const formTitle = document.getElementById("form-title");
+const cancelBtn = document.getElementById("cancel-edit-btn");
+const statusMsg = document.getElementById("status-msg");
+
+function showStatus(text) {
+  statusMsg.textContent = text;
+  statusMsg.classList.add("show");
+  setTimeout(() => statusMsg.classList.remove("show"), 2500);
+}
+
+function resetForm() {
+  idField.value = "";
+  nameField.value = "";
+  priceField.value = "";
+  descField.value = "";
+  imageField.value = "";
+  formTitle.textContent = "ახალი პროდუქტის დამატება";
+  cancelBtn.style.display = "none";
+}
+
+cancelBtn.addEventListener("click", resetForm);
+
+document.getElementById("save-btn").addEventListener("click", async () => {
+  const name = nameField.value.trim();
+  const price = priceField.value;
+  const description = descField.value.trim();
+  const file = imageField.files[0];
+  const existingId = idField.value;
+
+  if (!name || !price) {
+    showStatus("შეავსეთ დასახელება და ფასი.");
+    return;
+  }
+
+  const saveBtn = document.getElementById("save-btn");
+  saveBtn.disabled = true;
+  saveBtn.textContent = "ინახება...";
+
+  try {
+    let imageUrl = null;
+
+    if (file) {
+      const ref = storage.ref(`products/${Date.now()}_${file.name}`);
+      await ref.put(file);
+      imageUrl = await ref.getDownloadURL();
+    }
+
+    if (existingId) {
+      const data = { name, price: Number(price), description };
+      if (imageUrl) data.imageUrl = imageUrl;
+      await db.collection("products").doc(existingId).update(data);
+      showStatus("პროდუქტი განახლდა.");
+    } else {
+      await db.collection("products").add({
+        name,
+        price: Number(price),
+        description,
+        imageUrl: imageUrl || null,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      showStatus("პროდუქტი დაემატა.");
+    }
+
+    resetForm();
+  } catch (err) {
+    console.error(err);
+    showStatus("შეცდომა: " + err.message);
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = "შენახვა";
+  }
+});
+
+// ---------- Product list ----------
+
+function listenToProducts() {
+  db.collection("products").orderBy("createdAt", "desc").onSnapshot((snapshot) => {
+    const rows = document.getElementById("product-rows");
+    rows.innerHTML = "";
+
+    snapshot.forEach((doc) => {
+      const p = doc.data();
+      const tr = document.createElement("tr");
+
+      const thumbCell = document.createElement("td");
+      if (p.imageUrl) {
+        const img = document.createElement("img");
+        img.src = p.imageUrl;
+        img.className = "thumb-sm";
+        thumbCell.appendChild(img);
+      } else {
+        const span = document.createElement("div");
+        span.className = "thumb-sm";
+        thumbCell.appendChild(span);
+      }
+
+      const nameCell = document.createElement("td");
+      nameCell.textContent = p.name || "";
+
+      const priceCell = document.createElement("td");
+      priceCell.textContent = Number(p.price).toLocaleString("ka-GE") + " ₾";
+
+      const actionsCell = document.createElement("td");
+      const actions = document.createElement("div");
+      actions.className = "row-actions";
+
+      const editBtn = document.createElement("button");
+      editBtn.className = "btn btn-ghost btn-small";
+      editBtn.textContent = "რედაქტირება";
+      editBtn.addEventListener("click", () => {
+        idField.value = doc.id;
+        nameField.value = p.name || "";
+        priceField.value = p.price || "";
+        descField.value = p.description || "";
+        formTitle.textContent = "პროდუქტის რედაქტირება";
+        cancelBtn.style.display = "inline-flex";
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.className = "btn btn-danger btn-small";
+      deleteBtn.textContent = "წაშლა";
+      deleteBtn.addEventListener("click", async () => {
+        if (confirm(`წავშალო „${p.name}"?`)) {
+          await db.collection("products").doc(doc.id).delete();
+          showStatus("პროდუქტი წაიშალა.");
+        }
+      });
+
+      actions.appendChild(editBtn);
+      actions.appendChild(deleteBtn);
+      actionsCell.appendChild(actions);
+
+      tr.appendChild(thumbCell);
+      tr.appendChild(nameCell);
+      tr.appendChild(priceCell);
+      tr.appendChild(actionsCell);
+      rows.appendChild(tr);
+    });
+  });
+}
+</script>
+
+</body>
+</html>
